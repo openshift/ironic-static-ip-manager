@@ -4,5 +4,6 @@ RUN dnf install -y iproute jq && \
       dnf clean all && \
       rm -rf /var/cache/{yum,dnf}/*
 
+COPY ./find_interface.py /find_interface.py
 COPY ./set-static-ip /set-static-ip
 COPY ./refresh-static-ip /refresh-static-ip

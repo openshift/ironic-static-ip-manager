@@ -7,12 +7,7 @@ fi
 
 if [ -z "$PROVISIONING_INTERFACE" ]; then
   if [ -n "${PROVISIONING_MACS}" ]; then
-    for mac in ${PROVISIONING_MACS//,/ } ; do
-      if ip -br link show up | grep -q "$mac"; then
-        PROVISIONING_INTERFACE=$(ip -br link show up | grep "$mac" | cut -f 1 -d ' ')
-        break
-      fi
-    done
+    PROVISIONING_INTERFACE=$(python ./find_interface.py)
   fi
 fi
 

@@ -29,7 +29,7 @@ if [ -n "$PROVISIONING_INTERFACE" ]; then
   fi
 
   # Get rid of any DHCP addresses on the dedicated provisioning interface
-  /usr/sbin/ip address flush dev "$PROVISIONING_INTERFACE"
+  /usr/sbin/ip address flush dev "$PROVISIONING_INTERFACE" scope global
 
   # Need this to be long enough to bring up the pod with the ip refresh in it.
   # The refresh-static-ip container should lower this back to 10 seconds once it starts.

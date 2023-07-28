@@ -27,6 +27,10 @@ if [ -n "$PROVISIONING_INTERFACE" ]; then
     ip -o addr show dev "$PROVISIONING_INTERFACE" scope link | grep -q " fe80::" || \
     ( echo 1 > "/proc/sys/net/ipv6/conf/$PROVISIONING_INTERFACE/addr_gen_mode" ; echo 0 > "/proc/sys/net/ipv6/conf/$PROVISIONING_INTERFACE/addr_gen_mode" )
     /usr/sbin/ip addr change "$PROVISIONING_IP" dev "$PROVISIONING_INTERFACE" valid_lft 10 preferred_lft 10
+
+    # OCPBUGS-14614: Remove route for provisioning network from lo if it exists
+    [[ "$PROVISIONING_IP" =~ : ]] && ip -o -6 route show "$PROVISIONING_IP" | grep " lo " | xargs -tr ip route del
+
     sleep 5
   done
 else

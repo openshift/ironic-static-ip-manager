@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/ocp/builder:rhel-9-base-openshift-4.16
+FROM registry.ci.openshift.org/ocp/builder:rhel-9-base-openshift-4.17
 
 RUN dnf install -y iproute jq && \
       dnf clean all && \

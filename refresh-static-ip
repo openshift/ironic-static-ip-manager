@@ -8,8 +8,8 @@ fi
 if [ -z "$PROVISIONING_INTERFACE" ]; then
   if [ -n "${PROVISIONING_MACS}" ]; then
     for mac in ${PROVISIONING_MACS//,/ } ; do
-      if ip -br link show up | grep -qi "$mac"; then
-        PROVISIONING_INTERFACE=$(ip -br link show up | grep -i "$mac" | cut -f 1 -d ' ')
+      PROVISIONING_INTERFACE="$(ip -j link show up | jq -r ".[] | select(.address == \"${mac@L}\").ifname" | head -n 1)"
+      if [ -n "${PROVISIONING_INTERFACE}" ]; then
         break
       fi
     done

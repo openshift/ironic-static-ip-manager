@@ -16,26 +16,26 @@ if [ -z "$PROVISIONING_INTERFACE" ]; then
   fi
 fi
 
-if [ -n "$PROVISIONING_INTERFACE" ]; then
-  # Check provisioning interface is already set to ip address
-  if [[ -n $(ip -o addr show dev "${PROVISIONING_INTERFACE}" scope global) ]]; then
-    # equality check can be done for IPv4, i.e. 172.22.0.3/24
-    # for IPv6 and dualstack(IPv4v6), fd00:1101::x/64 is used as fd00:1101::xxxx:xxxx:xxxx:xxxx/128
-    # Thus, we need to parse provisioning ip with '::'.
-    if ! ip -o addr show dev "${PROVISIONING_INTERFACE}" scope global | grep -q "${PROVISIONING_IP//::*/}" ; then
-      echo "ERROR: \"$PROVISIONING_INTERFACE\" is already set to ip address belong to different subset than \"$PROVISIONING_IP\""
-      exit 1
-    fi
-  fi
-
-  # Get rid of any DHCP addresses on the dedicated provisioning interface
-  /usr/sbin/ip address flush dev "$PROVISIONING_INTERFACE" scope global
-
-  # Need this to be long enough to bring up the pod with the ip refresh in it.
-  # The refresh-static-ip container should lower this back to 10 seconds once it starts.
-  # The only time this will actually be set for 5 minutes is if the containers fail to come up.
-  /usr/sbin/ip addr add "$PROVISIONING_IP" dev "$PROVISIONING_INTERFACE" valid_lft 300 preferred_lft 300
-else
+if [ -z "${PROVISIONING_INTERFACE}" ]; then
   echo "ERROR: Could not find suitable interface for \"$PROVISIONING_IP\""
   exit 1
 fi
+
+# Check provisioning interface is already set to ip address
+if [[ -n $(ip -o addr show dev "${PROVISIONING_INTERFACE}" scope global) ]]; then
+  # equality check can be done for IPv4, i.e. 172.22.0.3/24
+  # for IPv6 and dualstack(IPv4v6), fd00:1101::x/64 is used as fd00:1101::xxxx:xxxx:xxxx:xxxx/128
+  # Thus, we need to parse provisioning ip with '::'.
+  if ! ip -o addr show dev "${PROVISIONING_INTERFACE}" scope global | grep -q "${PROVISIONING_IP//::*/}" ; then
+    echo "ERROR: \"$PROVISIONING_INTERFACE\" is already set to ip address belong to different subset than \"$PROVISIONING_IP\""
+    exit 1
+  fi
+fi
+
+# Get rid of any DHCP addresses on the dedicated provisioning interface
+/usr/sbin/ip address flush dev "$PROVISIONING_INTERFACE" scope global
+
+# Need this to be long enough to bring up the pod with the ip refresh in it.
+# The refresh-static-ip container should lower this back to 10 seconds once it starts.
+# The only time this will actually be set for 5 minutes is if the containers fail to come up.
+/usr/sbin/ip addr add "$PROVISIONING_IP" dev "$PROVISIONING_INTERFACE" valid_lft 300 preferred_lft 300

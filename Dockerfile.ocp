@@ -1,6 +1,6 @@
 FROM registry.ci.openshift.org/ocp/builder:rhel-9-base-openshift-4.14
 
-RUN dnf install -y iproute jq && \
+RUN dnf install -y iproute jq ipcalc && \
       dnf clean all && \
       rm -rf /var/cache/{yum,dnf}/*
 

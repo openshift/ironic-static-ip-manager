@@ -21,7 +21,7 @@ if [ -z "${PROVISIONING_INTERFACE}" ]; then
   exit 1
 fi
 
-if [[ -n $(ip -o addr show dev "${PROVISIONING_INTERFACE}" scope global) ]]; then
+if [ -n "$(ip -o addr show dev "${PROVISIONING_INTERFACE}" scope global)" ]; then
 
   function provisioning_net_valid() {
     local prov_vip_prefixlen

@@ -52,7 +52,8 @@ if [ -n "$(ip -o addr show dev "${PROVISIONING_INTERFACE}" scope global)" ]; the
   fi
 fi
 
-# Get rid of any DHCP addresses on the dedicated provisioning interface
+# Get rid of any DHCP addresses on the dedicated provisioning interface.
+# These may be added by dnsmasq in a previous incarnation of the pod.
 /usr/sbin/ip address flush dev "$PROVISIONING_INTERFACE" scope global
 
 # Need this to be long enough to bring up the pod with the ip refresh in it.

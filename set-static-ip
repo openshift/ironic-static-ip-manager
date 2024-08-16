@@ -8,34 +8,55 @@ fi
 if [ -z "$PROVISIONING_INTERFACE" ]; then
   if [ -n "${PROVISIONING_MACS}" ]; then
     for mac in ${PROVISIONING_MACS//,/ } ; do
-      if ip -br link show up | grep -qi "$mac"; then
-        PROVISIONING_INTERFACE=$(ip -br link show up | grep -i "$mac" | cut -f 1 -d ' ')
+      PROVISIONING_INTERFACE="$(ip -j link show up | jq -r ".[] | select(.address == \"${mac@L}\").ifname" | head -n 1)"
+      if [ -n "${PROVISIONING_INTERFACE}" ]; then
         break
       fi
     done
   fi
 fi
 
-if [ -n "$PROVISIONING_INTERFACE" ]; then
-  # Check provisioning interface is already set to ip address
-  if [[ -n $(ip -o addr show dev "${PROVISIONING_INTERFACE}" scope global) ]]; then
-    # equality check can be done for IPv4, i.e. 172.22.0.3/24
-    # for IPv6 and dualstack(IPv4v6), fd00:1101::x/64 is used as fd00:1101::xxxx:xxxx:xxxx:xxxx/128
-    # Thus, we need to parse provisioning ip with '::'.
-    if ! ip -o addr show dev "${PROVISIONING_INTERFACE}" scope global | grep -q "${PROVISIONING_IP//::*/}" ; then
-      echo "ERROR: \"$PROVISIONING_INTERFACE\" is already set to ip address belong to different subset than \"$PROVISIONING_IP\""
-      exit 1
-    fi
-  fi
-
-  # Get rid of any DHCP addresses on the dedicated provisioning interface
-  /usr/sbin/ip address flush dev "$PROVISIONING_INTERFACE" scope global
-
-  # Need this to be long enough to bring up the pod with the ip refresh in it.
-  # The refresh-static-ip container should lower this back to 10 seconds once it starts.
-  # The only time this will actually be set for 5 minutes is if the containers fail to come up.
-  /usr/sbin/ip addr add "$PROVISIONING_IP" dev "$PROVISIONING_INTERFACE" valid_lft 300 preferred_lft 300
-else
+if [ -z "${PROVISIONING_INTERFACE}" ]; then
   echo "ERROR: Could not find suitable interface for \"$PROVISIONING_IP\""
   exit 1
 fi
+
+if [ -n "$(ip -o addr show dev "${PROVISIONING_INTERFACE}" scope global)" ]; then
+
+  function provisioning_net_valid() {
+    local prov_vip_prefixlen
+    prov_vip_prefixlen="$(ipcalc --no-decorate --prefix "${PROVISIONING_IP}")"
+
+    for ip_addr in $(ip -j -o addr show dev "${PROVISIONING_INTERFACE}" | jq -r '.[0].addr_info[] | select(.scope == "global").local'); do
+      # for IPv6 and dualstack(IPv4v6), fd00:1101::x/64 provisioning VIP
+      # has DHCP IP like fd00:1101::xxxx:xxxx:xxxx:xxxx/128
+      # Thus, we need to compare using the VIP's prefix length
+      local host_ip_cidr="${ip_addr}/${prov_vip_prefixlen}"
+      if ! ipcalc --check "${host_ip_cidr}" >/dev/null; then
+          continue
+      fi
+      if [ "$(ipcalc --no-decorate --network "${host_ip_cidr}")" = \
+          "$(ipcalc --no-decorate --network "${PROVISIONING_IP}")" ]; then
+        return 0
+      fi
+    done
+    echo "ERROR: provisioning interface \"${PROVISIONING_INTERFACE}\" IP addresses are all outside the provisioning subnet \"${PROVISIONING_IP}\""
+    return 1
+  }
+
+  # Check that we are not about to reconfigure an interface that is already
+  # configured for a different network, which may indicate that we are dealing
+  # with the machine network.
+  if ! provisioning_net_valid; then
+    exit 1
+  fi
+fi
+
+# Get rid of any DHCP addresses on the dedicated provisioning interface.
+# These may be added by dnsmasq in a previous incarnation of the pod.
+/usr/sbin/ip address flush dev "$PROVISIONING_INTERFACE" scope global
+
+# Need this to be long enough to bring up the pod with the ip refresh in it.
+# The refresh-static-ip container should lower this back to 10 seconds once it starts.
+# The only time this will actually be set for 5 minutes is if the containers fail to come up.
+/usr/sbin/ip addr add "$PROVISIONING_IP" dev "$PROVISIONING_INTERFACE" valid_lft 300 preferred_lft 300

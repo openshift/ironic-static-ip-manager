@@ -8,32 +8,35 @@ fi
 if [ -z "$PROVISIONING_INTERFACE" ]; then
   if [ -n "${PROVISIONING_MACS}" ]; then
     for mac in ${PROVISIONING_MACS//,/ } ; do
-      if ip -br link show up | grep -qi "$mac"; then
-        PROVISIONING_INTERFACE=$(ip -br link show up | grep -i "$mac" | cut -f 1 -d ' ')
+      PROVISIONING_INTERFACE="$(ip -j link show up | jq -r ".[] | select(.address == \"${mac@L}\").ifname" | head -n 1)"
+      if [ -n "${PROVISIONING_INTERFACE}" ]; then
         break
       fi
     done
   fi
 fi
 
-if [ -n "$PROVISIONING_INTERFACE" ]; then
-  # In case the IP has lapsed since we set it in the init container.
-  /usr/sbin/ip addr add "$PROVISIONING_IP" dev "$PROVISIONING_INTERFACE" valid_lft 10 preferred_lft 10 || true
-
-  while true; do
-    # https://bugzilla.redhat.com/show_bug.cgi?id=1908302
-    # Toggling addr_gen_mode prompts the link local address to be reapplied in cases
-    # where it is lost.
-    ip -o addr show dev "$PROVISIONING_INTERFACE" scope link | grep -q " fe80::" || \
-    ( echo 1 > "/proc/sys/net/ipv6/conf/$PROVISIONING_INTERFACE/addr_gen_mode" ; echo 0 > "/proc/sys/net/ipv6/conf/$PROVISIONING_INTERFACE/addr_gen_mode" )
-    /usr/sbin/ip addr change "$PROVISIONING_IP" dev "$PROVISIONING_INTERFACE" valid_lft 10 preferred_lft 10
-
-    # OCPBUGS-14614: Remove route for provisioning network from lo if it exists
-    [[ "$PROVISIONING_IP" =~ : ]] && ip -o -6 route show "$PROVISIONING_IP" | grep " lo " | xargs -tr ip route del
-
-    sleep 5
-  done
-else
+if [ -z "${PROVISIONING_INTERFACE}" ]; then
   echo "ERROR: Could not find suitable interface for \"$PROVISIONING_IP\""
   exit 1
 fi
+
+# In case the IP has lapsed since we set it in the init container.
+/usr/sbin/ip addr add "$PROVISIONING_IP" dev "$PROVISIONING_INTERFACE" valid_lft 10 preferred_lft 10 || true
+
+while true; do
+  # https://bugzilla.redhat.com/show_bug.cgi?id=1908302
+  # Toggling addr_gen_mode prompts the link local address to be reapplied in cases
+  # where it is lost.
+  if [ "$(ip -o -6 address show dev "${PROVISIONING_INTERFACE}" scope link)" = "" ]; then
+    echo 1 > "/proc/sys/net/ipv6/conf/${PROVISIONING_INTERFACE}/addr_gen_mode"
+    echo 0 > "/proc/sys/net/ipv6/conf/${PROVISIONING_INTERFACE}/addr_gen_mode"
+  fi
+
+  /usr/sbin/ip addr change "$PROVISIONING_IP" dev "$PROVISIONING_INTERFACE" valid_lft 10 preferred_lft 10
+
+  # OCPBUGS-14614: Remove route for provisioning network from lo if it exists
+  [[ "$PROVISIONING_IP" =~ : ]] && ip -o -6 route show "$PROVISIONING_IP" | grep " lo " | xargs -tr ip route del
+
+  sleep 5
+done
